@@ -12,12 +12,11 @@ clear
 echo -e "${CYAN}"
 echo "=================================================="
 echo "          🚀 AUTO INSTALL PHPMYADMIN v5.2.1       "
-echo "           by Sunda Cloud - Bash Script          "
 echo "=================================================="
 echo -e "${NC}"
 
 # Prompt Input
-read -p "🌐 Masukkan domain phpMyAdmin (contoh: php.sundacloud.com): " DOMAIN
+read -p "🌐 Masukkan domain phpMyAdmin (contoh: php.domain.com): " DOMAIN
 read -p "👤 Masukkan username database MySQL: " DBUSER
 read -p "🔑 Masukkan password untuk user MySQL [$DBUSER]: " DBPASS
 
