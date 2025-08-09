@@ -40,6 +40,10 @@ echo -e "${CYAN}📥 Mengunduh phpMyAdmin...${NC}"
 wget -q https://files.phpmyadmin.net/phpMyAdmin/5.2.1/phpMyAdmin-5.2.1-all-languages.zip
 unzip -q phpMyAdmin-5.2.1-all-languages.zip
 sudo mkdir -p /var/www/phpmyadmin
+
+# Jika folder phpmyadmin sudah ada, hapus isinya dulu supaya mv berhasil tanpa error "Directory not empty"
+sudo rm -rf /var/www/phpmyadmin/*
+
 sudo mv phpMyAdmin-5.2.1-all-languages/* /var/www/phpmyadmin
 rm -rf phpMyAdmin-5.2.1-all-languages*
 
@@ -116,4 +120,3 @@ echo -e "🌐 URL: ${CYAN}https://$DOMAIN${NC} (akses melalui HTTPS)"
 echo -e "👤 MySQL User: ${YELLOW}$DBUSER${NC}"
 echo -e "🔐 Password  : ${YELLOW}$DBPASS${NC}"
 echo -e "\n🔔 Jangan lupa buka port 80 dan 443 di firewall kamu jika ada."
-
