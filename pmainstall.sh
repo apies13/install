@@ -4,13 +4,14 @@
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 # Banner
 clear
 echo -e "${CYAN}"
 echo "=================================================="
-echo "      🚀 AUTO INSTALL PHPMYADMIN v5.2.1 (NO SSL)  "
+echo "      🚀 AUTO INSTALL PHPMYADMIN v5.2.1 (SSL)     "
 echo "       by Sunda Cloud - Bash Script (Modified)   "
 echo "=================================================="
 echo -e "${NC}"
@@ -31,7 +32,8 @@ sleep 2
 
 # Step 1: Install packages
 echo -e "${CYAN}📦 Menginstal dependensi...${NC}"
-sudo apt update && sudo apt install -y wget unzip nginx php php-fpm php-mysql mariadb-server unzip > /dev/null
+sudo apt update
+sudo apt install -y wget unzip nginx php php-fpm php-mysql mariadb-server unzip software-properties-common > /dev/null
 
 # Step 2: Unduh phpMyAdmin
 echo -e "${CYAN}📥 Mengunduh phpMyAdmin...${NC}"
@@ -49,8 +51,10 @@ BLOWFISH=$(openssl rand -base64 32)
 sed -i "s|\['blowfish_secret'\] = ''|['blowfish_secret'] = '$BLOWFISH'|g" config.inc.php
 echo "\$cfg['TempDir'] = '/tmp';" >> config.inc.php
 
-# Step 4: Konfigurasi NGINX tanpa SSL
-echo -e "${CYAN}📁 Menyiapkan konfigurasi NGINX (tanpa SSL)...${NC}"
+sudo chown -R www-data:www-data /var/www/phpmyadmin
+
+# Step 4: Konfigurasi NGINX tanpa SSL (sementara)
+echo -e "${CYAN}📁 Menyiapkan konfigurasi NGINX awal (HTTP)...${NC}"
 cat <<EOF | sudo tee /etc/nginx/sites-available/phpmyadmin.conf > /dev/null
 server {
     listen 80;
@@ -83,7 +87,17 @@ EOF
 sudo ln -sf /etc/nginx/sites-available/phpmyadmin.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
-# Step 5: MySQL Config
+# Step 5: Install Certbot & dapatkan SSL cert
+echo -e "${CYAN}🔐 Menginstal Certbot dan mendapatkan SSL certificate...${NC}"
+sudo apt install -y certbot python3-certbot-nginx > /dev/null
+
+sudo certbot --nginx --non-interactive --agree-tos -m admin@$DOMAIN -d $DOMAIN --redirect
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Gagal mendapatkan sertifikat SSL. Periksa domain dan konfigurasi DNS.${NC}"
+    exit 1
+fi
+
+# Step 6: MySQL Config
 echo -e "${CYAN}🗄️  Membuat user MySQL...${NC}"
 sudo mysql -u root <<MYSQL_SCRIPT
 CREATE USER IF NOT EXISTS '$DBUSER'@'%' IDENTIFIED BY '$DBPASS';
@@ -91,13 +105,15 @@ GRANT ALL PRIVILEGES ON *.* TO '$DBUSER'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 MYSQL_SCRIPT
 
-# Step 6: Enable remote MySQL
+# Step 7: Enable remote MySQL
 echo -e "${CYAN}🔓 Mengaktifkan remote MySQL...${NC}"
 sudo sed -i 's/^bind-address\s*=.*/bind-address = 0.0.0.0/' /etc/mysql/mariadb.conf.d/50-server.cnf
 sudo systemctl restart mariadb
 
 # Done
-echo -e "\n${GREEN}✅ phpMyAdmin berhasil diinstall tanpa SSL!${NC}"
-echo -e "🌐 URL: ${CYAN}http://$DOMAIN${NC} (akses melalui HTTP)"
+echo -e "\n${GREEN}✅ phpMyAdmin berhasil diinstall dengan SSL!${NC}"
+echo -e "🌐 URL: ${CYAN}https://$DOMAIN${NC} (akses melalui HTTPS)"
 echo -e "👤 MySQL User: ${YELLOW}$DBUSER${NC}"
 echo -e "🔐 Password  : ${YELLOW}$DBPASS${NC}"
+echo -e "\n🔔 Jangan lupa buka port 80 dan 443 di firewall kamu jika ada."
+
