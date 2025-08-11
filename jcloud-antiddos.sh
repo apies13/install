@@ -23,23 +23,22 @@ if [[ -z "$GIF_URL" ]]; then
   GIF_URL="https://cdn.discordapp.com/attachments/1381180064842121219/1404108294779437126/standard_2.gif"
 fi
 
-# --- configurable defaults (ubah bila perlu sebelum menjalankan) ---
+# --- configurable defaults ---
 PROTECTED_PORT_RANGE="${PROTECTED_PORT_RANGE:-7700:7800}"
 IPSET_NAME="${IPSET_NAME:-ddos-ban}"
-BAN_DURATION="${BAN_DURATION:-7200}"       # ban timeout (detik) default 2 jam
-CHECK_INTERVAL="${CHECK_INTERVAL:-12}"     # deteksi loop sleep (detik)
-REPORT_INTERVAL="${REPORT_INTERVAL:-3600}" # kirim laporan setiap 1 jam
-MAX_ENDPOINTS="${MAX_ENDPOINTS:-180}"      # threshold per-IP endpoint count (tuneable)
-# -------------------------------------------------------------------
+BAN_DURATION="${BAN_DURATION:-7200}"
+CHECK_INTERVAL="${CHECK_INTERVAL:-12}"
+REPORT_INTERVAL="${REPORT_INTERVAL:-3600}"
+MAX_ENDPOINTS="${MAX_ENDPOINTS:-180}"
+# --------------------------------
 
 echo "[INFO] Menginstall paket yang diperlukan..."
 export DEBIAN_FRONTEND=noninteractive
 apt update -y >/dev/null 2>&1 || true
 apt install -y ipset iptables curl jq iproute2 procps conntrack ss >/dev/null 2>&1 || {
-  echo "[WARN] `apt install` gagal atau membutuhkan interaksi. Coba jalankan 'apt install ipset iptables curl jq ss' secara manual."
+  echo "[WARN] apt install gagal atau membutuhkan interaksi. Jalankan manual jika perlu."
 }
 
-# create folder & config
 mkdir -p /opt/ddos
 cat >/opt/ddos/config.env <<EOF
 NODE_NAME="${NODE_NAME}"
@@ -67,57 +66,39 @@ LOG_PREFIX="JCD-LOG:"
 declare -A SEEN_NOTIFIED
 LAST_HOUR_TS=0
 
-# ensure ipset
 ipset create "${IPSET_NAME}" hash:ip timeout "${BAN_DURATION}" -exist
 
-# base rules: allow loopback & established
 iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || iptables -A INPUT -i lo -j ACCEPT
 iptables -C INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# ensure quick drop for banned ipset
 iptables -C INPUT -m set --match-set "${IPSET_NAME}" src -j DROP 2>/dev/null || iptables -I INPUT 1 -m set --match-set "${IPSET_NAME}" src -j DROP
 
-# create chain (idempotent)
 iptables -N JCD_PROT 2>/dev/null || true
 iptables -F JCD_PROT
 
-# === LEVEL 6: drop invalid / fragments ===
 iptables -A JCD_PROT -m conntrack --ctstate INVALID -j DROP
 iptables -A JCD_PROT -f -j DROP
-
-# === LEVEL 7: XMAS / NULL scan drop ===
 iptables -A JCD_PROT -p tcp --tcp-flags ALL ALL -j DROP
 iptables -A JCD_PROT -p tcp --tcp-flags ALL NONE -j DROP
-
-# === LEVEL 5: SYN flood protection ===
-# allow reasonable SYN rate, else log & ban
 iptables -A JCD_PROT -p tcp --syn -m hashlimit --hashlimit 12/s --hashlimit-burst 40 --hashlimit-mode srcip --hashlimit-name jcd_syn -j RETURN
 iptables -A JCD_PROT -p tcp --syn -j LOG --log-prefix "${LOG_PREFIX} SYN-FLOOD: " --log-level 4
 iptables -A JCD_PROT -p tcp --syn -j SET --add-set "${IPSET_NAME}" src --timeout "${BAN_DURATION}"
 
-# === LEVEL 4: connection limit & recent ===
 iptables -A JCD_PROT -p tcp --dport ${PROTECTED_PORT_RANGE} -m connlimit --connlimit-above 120 --connlimit-mask 32 -j LOG --log-prefix "${LOG_PREFIX} CONNLIMIT: " --log-level 4
 iptables -A JCD_PROT -p tcp --dport ${PROTECTED_PORT_RANGE} -m connlimit --connlimit-above 120 --connlimit-mask 32 -j SET --add-set "${IPSET_NAME}" src --timeout "${BAN_DURATION}"
-
 iptables -A JCD_PROT -p tcp --dport ${PROTECTED_PORT_RANGE} -m conntrack --ctstate NEW -m recent --name JCD_TCP --set
 iptables -A JCD_PROT -p tcp --dport ${PROTECTED_PORT_RANGE} -m conntrack --ctstate NEW -m recent --name JCD_TCP --update --seconds 10 --hitcount 200 -j LOG --log-prefix "${LOG_PREFIX} NEWTCP: " --log-level 4
 iptables -A JCD_PROT -p tcp --dport ${PROTECTED_PORT_RANGE} -m conntrack --ctstate NEW -m recent --name JCD_TCP --update --seconds 10 --hitcount 200 -j SET --add-set "${IPSET_NAME}" src --timeout "${BAN_DURATION}"
 
-# === LEVEL 3: UDP rate limiting (SAMP heavy) ===
-# allow burst, then log & ban
 iptables -A JCD_PROT -p udp --dport ${PROTECTED_PORT_RANGE} -m hashlimit --hashlimit 300/s --hashlimit-burst 600 --hashlimit-mode srcip --hashlimit-name jcd_udp -j RETURN
 iptables -A JCD_PROT -p udp --dport ${PROTECTED_PORT_RANGE} -j LOG --log-prefix "${LOG_PREFIX} UDP-FLOOD: " --log-level 4
 iptables -A JCD_PROT -p udp --dport ${PROTECTED_PORT_RANGE} -j SET --add-set "${IPSET_NAME}" src --timeout "${BAN_DURATION}"
 
-# mild ICMP control
 iptables -A JCD_PROT -p icmp -m limit --limit 1/s --limit-burst 3 -j RETURN
 iptables -A JCD_PROT -p icmp -j DROP
 
-# attach chain to INPUT
 iptables -C INPUT -p udp --dport ${PROTECTED_PORT_RANGE} -j JCD_PROT 2>/dev/null || iptables -A INPUT -p udp --dport ${PROTECTED_PORT_RANGE} -j JCD_PROT
 iptables -C INPUT -p tcp --dport ${PROTECTED_PORT_RANGE} -j JCD_PROT 2>/dev/null || iptables -A INPUT -p tcp --dport ${PROTECTED_PORT_RANGE} -j JCD_PROT
 
-# helper: send embed (uses jq to build payload)
 send_embed() {
   local title="$1"; local color="${2:-16711680}"; local fields_json="${3:-null}"
   local ts; ts=$(date -Iseconds)
@@ -150,7 +131,7 @@ notify_attack() {
     { "name":"Port Range", "value": $pr, "inline": true },
     { "name":"Ban Duration", "value": ($ban + " seconds"), "inline": true }
   ]')
-  send_embed ("🚨 DDoS Detected - " + "${NODE_NAME}") 16711680 "$fields"
+  send_embed "🚨 DDoS Detected - ${NODE_NAME}" 16711680 "$fields"
 }
 
 send_hourly_ok() {
@@ -162,10 +143,9 @@ send_hourly_ok() {
     { "name":"Banned IPs", "value": $bans, "inline": true },
     { "name":"Port Range", "value": $pr, "inline": true }
   ]')
-  send_embed ("✅ JCloud Shield - " + "${NODE_NAME}") 65280 "$fields"
+  send_embed "✅ JCloud Shield - ${NODE_NAME}" 65280 "$fields"
 }
 
-# detection: fast count of UDP/TCP endpoints in port-range
 detect_and_ban() {
   ss -u -n | awk -v pr="${PROTECTED_PORT_RANGE}" '
     {
@@ -186,9 +166,7 @@ detect_and_ban() {
       fi
   done
 
-  # parse recent kernel logs for our LOG_PREFIX (non-blocking)
   if command -v journalctl >/dev/null 2>&1; then
-    # we look back for short time window; spawn a background grep to avoid blocking
     journalctl -kf -o cat --since "1s" | grep --line-buffered "${LOG_PREFIX}" 2>/dev/null | while read -r line; do
       IP=$(echo "$line" | grep -oP '(?<=SRC=)[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
       if [[ -n "$IP" ]]; then
@@ -199,33 +177,32 @@ detect_and_ban() {
         fi
       fi
     done &
-  else
-    if [[ -f /var/log/kern.log ]]; then
-      grep "${LOG_PREFIX}" /var/log/kern.log | tail -n 200 | while read -r line; do
-        IP=$(echo "$line" | grep -oP '(?<=SRC=)[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
-        if [[ -n "$IP" ]]; then
-          ipset add "${IPSET_NAME}" "$IP" timeout "${BAN_DURATION}" 2>/dev/null || true
-          if [[ -z "${SEEN_NOTIFIED[$IP]:-}" ]]; then
-            SEEN_NOTIFIED["$IP"]=1
-            notify_attack "$IP" "kern-log"
-          fi
+  elif [[ -f /var/log/kern.log ]]; then
+    grep "${LOG_PREFIX}" /var/log/kern.log | tail -n 200 | while read -r line; do
+      IP=$(echo "$line" | grep -oP '(?<=SRC=)[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
+      if [[ -n "$IP" ]]; then
+        ipset add "${IPSET_NAME}" "$IP" timeout "${BAN_DURATION}" 2>/dev/null || true
+        if [[ -z "${SEEN_NOTIFIED[$IP]:-}" ]]; then
+          SEEN_NOTIFIED["$IP"]=1
+          notify_attack "$IP" "kern-log"
         fi
-      done
-    fi
+      fi
+    done
   fi
 }
 
-# main loop
+# Kirim embed pertama kali saat start
+send_hourly_ok
+LAST_HOUR_TS=$(date +%s)
+
 while true; do
   detect_and_ban
-
   NOW_TS=$(date +%s)
   if (( NOW_TS - LAST_HOUR_TS >= REPORT_INTERVAL )); then
     send_hourly_ok
     LAST_HOUR_TS=$NOW_TS
     SEEN_NOTIFIED=()
   fi
-
   sleep "${CHECK_INTERVAL}"
 done
 EOF
@@ -233,7 +210,6 @@ EOF
 chmod +x /opt/ddos/anti-ddos-node.sh
 echo "[INFO] Wrote /opt/ddos/anti-ddos-node.sh"
 
-# create systemd unit
 cat >/etc/systemd/system/anti-ddos-node.service <<'UNIT'
 [Unit]
 Description=Anti-DDoS Node Service (SAMP)
