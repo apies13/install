@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ganti domain ini dengan domain kamu
-DOMAIN="uptime.jartaseacloud.my.id"
+DOMAIN="uptime.jartasea.store"
 
 echo "=============================="
 echo "🚀 Installing Uptime Kuma..."
