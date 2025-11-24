@@ -362,44 +362,45 @@ local function blatantFishingLoop()
         if not isFishing then
             isFishing = true
             
-            -- Step 1: Rapid fire casts (2 parallel casts)
+            -- [[ TAHAP 1: DOUBLE CAST (Lempar 2 Kali) ]]
             pcall(function()
                 Events.equip:FireServer(1)
-                task.wait(0.03)
+                task.wait(0.05) -- Tunggu equip sebentar
                 
-                -- Cast 1
+                -- Lemparan Pertama
                 task.spawn(function()
-                    Events.charge:InvokeServer(1755848498.4834)
+                    Events.charge:InvokeServer(1763950945.397729)
                     task.wait(0.01)
-                    Events.minigame:InvokeServer(1.2854545116425, 1)
+                    Events.minigame:InvokeServer(1.2854545116425, 0.9378207075323894, 1763950947.629105)
                 end)
                 
-                task.wait(0.05)
+                task.wait(0.15) -- Jeda Wajib agar server tidak nge-bug
                 
-                -- Cast 2 (overlapping)
+                -- Lemparan Kedua (Menumpuk)
                 task.spawn(function()
-                    Events.charge:InvokeServer(1755848498.4834)
+                    Events.charge:InvokeServer(1763950945.397729)
                     task.wait(0.01)
-                    Events.minigame:InvokeServer(1.2854545116425, 1)
+                    Events.minigame:InvokeServer(1.2854545116425, 0.9378207075323894, 1763950947.629105)
                 end)
             end)
             
-            -- Step 2: Wait for fish to bite (USING BLATANT DELAY)
-            task.wait(Config.BlatantDelay) -- <--- MODIFIED HERE
+            -- [[ TAHAP 2: TUNGGU IKAN ]]
+            -- Menggunakan delay khusus Blatant
+            task.wait(Config.BlatantDelay) 
             
-            -- Step 3: Spam reel 5x to instant catch
-            for i = 1, 3 do
-                pcall(function() 
-                    Events.fishing:FireServer() 
-                end)
-                task.wait(0.01)
-            end
+            -- [[ TAHAP 3: DOUBLE REEL (Tarik 2 Kali) ]]
+            -- Tarik Ikan Pertama
+            pcall(function() Events.fishing:FireServer() end)
             
-            -- Step 4: Short cooldown (50% faster)
-            task.wait(Config.CatchDelay * 0.5)
+            task.wait(0.1) -- Jeda dikit biar dua-duanya kehitung
             
+            -- Tarik Ikan Kedua
+            pcall(function() Events.fishing:FireServer() end)
+            
+            -- [[ TAHAP 4: SELESAI ]]
+            print("[Blatant] ⚡ 2x Cast & 2x Reel Selesai")
+            task.wait(Config.CatchDelay)
             isFishing = false
-            print("[Blatant] ⚡ Fast cycle")
         else
             task.wait(0.01)
         end
