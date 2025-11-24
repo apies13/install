@@ -1,5 +1,5 @@
 -- ====================================================================
---            AUTO FISH V5.6 - BLATANT DELAY MENU ADDED
+--            AUTO FISH V5.7 - BLATANT DELAY MENU ADDED
 -- ====================================================================
 
 -- ====== CRITICAL DEPENDENCY VALIDATION ======
@@ -486,7 +486,7 @@ end)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "🎣 Auto Fish V5.6",
+    Name = "🎣 Auto Fish V5.7",
     LoadingTitle = "Ultra-Fast Fishing",
     LoadingSubtitle = "With Blatant Delay Menu",
     ConfigurationSaving = {
@@ -726,7 +726,7 @@ Rayfield:Notify({
     Image = 4483362458
 })
 
-print("🎣 Auto Fish V5.6 - Loaded!")
+print("🎣 Auto Fish V5.7 - Loaded!")
 print("✅ Using YOUR working fishing method")
 print("✅ Blatant Mode + Custom Delay available")
 print("✅ Teleport system from dev1.lua integrated")
