@@ -55,7 +55,7 @@ local DefaultConfig = {
     GPUSaver = false,
     BlatantMode = false,
     FishDelay = 0.9,      -- Delay untuk Normal Mode
-    BlatantDelay = 2.0,   -- Delay KHUSUS untuk Blatant Mode (NEW)
+    BlatantDelay = 0.9,   -- Delay KHUSUS untuk Blatant Mode (NEW)
     CatchDelay = 0.2,
     SellDelay = 30,
     TeleportLocation = "Sisyphus Statue",
@@ -365,7 +365,7 @@ local function blatantFishingLoop()
             -- Step 1: Rapid fire casts (2 parallel casts)
             pcall(function()
                 Events.equip:FireServer(1)
-                task.wait(0.01)
+                task.wait(0.03)
                 
                 -- Cast 1
                 task.spawn(function()
@@ -388,7 +388,7 @@ local function blatantFishingLoop()
             task.wait(Config.BlatantDelay) -- <--- MODIFIED HERE
             
             -- Step 3: Spam reel 5x to instant catch
-            for i = 1, 5 do
+            for i = 1, 3 do
                 pcall(function() 
                     Events.fishing:FireServer() 
                 end)
